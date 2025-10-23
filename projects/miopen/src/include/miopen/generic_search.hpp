@@ -506,6 +506,9 @@ auto GenericSearch(const Solver s,
                                     std::ref(solution_queue));
     }
 
+    // Log all samples to file/screen
+    std::ostringstream all_samples_str;
+
     if(!env::enabled(MIOPEN_DEBUG_COMPILE_ONLY))
     {
         size_t n_current       = 0;
@@ -550,7 +553,7 @@ auto GenericSearch(const Solver s,
                               << current_config);
 
             Invoker invoker;
-
+            float warmup_time = 0.0f;
             try
             {
                 invoker = profile_h.PrepareInvoker(*current_solution.invoker_factory,
@@ -558,6 +561,7 @@ auto GenericSearch(const Solver s,
 
                 // Warm-up run for every configuration to eliminate cold-start bias
                 invoker(profile_h, invoke_ctx);
+                warmup_time = profile_h.GetKernelTime();
                 profile_h.ResetKernelTime();
 
                 // Run 2 initial tests and take the minimum to reduce noise
@@ -589,10 +593,10 @@ auto GenericSearch(const Solver s,
                 ret = 1;
             }
 
-            MIOPEN_LOG_T("##"
-                         << "(n_current, n_failed, n_runs_total):  " << n_current << '/' << n_failed
-                         << '/' << n_runs_total << " elapsed_time: " << elapsed_time
-                         << ", best_time: " << best_time << ", " << current_config);
+            MIOPEN_LOG_T("##" << "(n_current, n_failed, n_runs_total):  " << n_current << '/'
+                              << n_failed << '/' << n_runs_total
+                              << " elapsed_time: " << elapsed_time << ", best_time: " << best_time
+                              << ", " << current_config);
 
             if(ret == 0)
             {
@@ -601,9 +605,22 @@ auto GenericSearch(const Solver s,
                 // worst sample of the best config, continue with 8 more samples (total 10).
                 // The 1.2x threshold (vs original 1.1x) accounts for initial test variance.
                 // Remove positive z-score outliers and use the mean for calculating best config.
-                constexpr int N_RUNS = 10;
+                constexpr int N_RUNS                 = 10;
                 constexpr float EARLY_STOP_THRESHOLD = 1.20f;
                 last_imprv++;
+
+                bool is_not_skipped = (elapsed_time / worst_time < EARLY_STOP_THRESHOLD);
+                all_samples_str << "\n &&&& If_not_Skipped: " << is_not_skipped
+                                << " / elapsed_time: " << elapsed_time
+                                << " / wrost_time: " << worst_time << " / current_config: " << " ["
+                                << current_config.ToString() << "]"
+                                << " Initial Samples(ms): " << samples[0] << ", " << samples[1]
+                                << " ("
+                                << "Ratio: " << (elapsed_time / worst_time)
+                                << " vs Threshold: " << EARLY_STOP_THRESHOLD << ")"
+                                << "best_time: " << best_time << "best_config: ["
+                                << best_config.ToString() << "]" << "\n";
+                MIOPEN_LOG_W(all_samples_str.str()); // Use LOG_W to ensure it's printed
                 if(elapsed_time / worst_time < EARLY_STOP_THRESHOLD)
                 {
                     MIOPEN_LOG_I2("Initial test passed (" << elapsed_time << " / " << worst_time
@@ -620,6 +637,17 @@ auto GenericSearch(const Solver s,
                             samples.push_back(profile_h.GetKernelTime());
                             profile_h.ResetKernelTime();
                         }
+
+                        all_samples_str << " Config#" << n_current << " ["
+                                        << current_config.ToString()
+                                        << "] Samples(ms): " << warmup_time << ", ";
+                        for(size_t i = 0; i < samples.size(); ++i)
+                        {
+                            all_samples_str << samples[i];
+                            if(i < samples.size() - 1)
+                                all_samples_str << ", ";
+                        }
+                        MIOPEN_LOG_W(all_samples_str.str()); // Use LOG_W to ensure it's printed
                     }
                     catch(...)
                     {
@@ -652,15 +680,13 @@ auto GenericSearch(const Solver s,
                             MIOPEN_LOG_I2("Mean is not better: " << elapsed_time
                                                                  << " >= " << best_time);
                         }
-
                     }
                 }
                 else
                 {
-                    MIOPEN_LOG_I2("Configuration discarded by early-stop: " << elapsed_time << " / "
-                                                                            << worst_time << " = "
-                                                                            << (elapsed_time / worst_time)
-                                                                            << " >= " << EARLY_STOP_THRESHOLD);
+                    MIOPEN_LOG_I2("Configuration discarded by early-stop: "
+                                  << elapsed_time << " / " << worst_time << " = "
+                                  << (elapsed_time / worst_time) << " >= " << EARLY_STOP_THRESHOLD);
                 }
                 if(perf_sols)
                 {
@@ -680,6 +706,7 @@ auto GenericSearch(const Solver s,
                                  << " Failed rc=" << ret);
                 ++n_failed;
             }
+
             heartbeat.Monitor(ret != 0,
                               elapsed_time,
                               n_current,
@@ -718,6 +745,9 @@ auto GenericSearch(const Solver s,
     const auto score        = (best_time > 0.0f) ? default_time / best_time : 0.0f;
     MIOPEN_LOG_I("...Score: " << score << " (default time " << default_time << ')');
 
+    all_samples_str << "\n&&&Best-best config: [" << best_config.ToString()
+                    << "] best_time: " << best_time;
+    MIOPEN_LOG_W(all_samples_str.str());
     return best_config;
 }
 
