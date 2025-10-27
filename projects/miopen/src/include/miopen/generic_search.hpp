@@ -429,6 +429,10 @@ auto GenericSearch(const Solver s,
                    std::vector<SolutionPerf>* perf_sols = nullptr)
     -> decltype(s.GetDefaultPerformanceConfig(context_, problem))
 {
+    // Debug
+    // const auto generic_search_start_time = std::chrono::high_resolution_clock::now();
+
+
     auto context                  = context_;
     context.is_for_generic_search = true;
 
@@ -505,6 +509,9 @@ auto GenericSearch(const Solver s,
                                     std::ref(all_configs),
                                     std::ref(solution_queue));
     }
+
+    // Debug pr-1993
+    std::optional<std::tuple<PerformanceConfig, ConvSolution, bool>> best_kinder;
 
     // Log all samples to file/screen
     std::ostringstream all_samples_str;
@@ -605,7 +612,7 @@ auto GenericSearch(const Solver s,
                 // worst sample of the best config, continue with 8 more samples (total 10).
                 // The 1.2x threshold (vs original 1.1x) accounts for initial test variance.
                 // Remove positive z-score outliers and use the mean for calculating best config.
-                constexpr int N_RUNS                 = 10;
+                constexpr int N_RUNS                 = 4;
                 constexpr float EARLY_STOP_THRESHOLD = 1.20f;
                 last_imprv++;
 
@@ -674,6 +681,9 @@ auto GenericSearch(const Solver s,
                             worst_time = samples.back();
                             n_best     = n_current;
                             last_imprv = 0;
+
+                            // Debug pr-1993
+                            best_kinder = kinder;
                         }
                         else
                         {
@@ -745,9 +755,63 @@ auto GenericSearch(const Solver s,
     const auto score        = (best_time > 0.0f) ? default_time / best_time : 0.0f;
     MIOPEN_LOG_I("...Score: " << score << " (default time " << default_time << ')');
 
-    all_samples_str << "\n&&&Best-best config: [" << best_config.ToString()
-                    << "] best_time: " << best_time;
-    MIOPEN_LOG_W(all_samples_str.str());
+    // all_samples_str << "\n&&&Best-best config: [" << best_config.ToString()
+    //                 << "] best_time: " << best_time;
+    // MIOPEN_LOG_W(all_samples_str.str());
+
+    // Debug pr-1993
+    if(best_kinder.has_value())
+    {
+        auto best_current_config   = std::get<0>(*best_kinder);
+        auto best_current_solution = std::get<1>(*best_kinder);
+        auto best_invoker = profile_h.PrepareInvoker(*best_current_solution.invoker_factory,
+                                                     best_current_solution.construction_params);
+
+        std::vector<float> best_samples;
+        best_samples.reserve(11);
+
+        MIOPEN_LOG_I2("Testing best configuration with 11 samples");
+
+        for(int i = 0; i < 11; ++i)
+        {
+            try
+            {
+                best_invoker(profile_h, invoke_ctx);
+                best_samples.push_back(profile_h.GetKernelTime());
+                profile_h.ResetKernelTime();
+            }
+            catch(const std::exception& e)
+            {
+                MIOPEN_LOG_E("Error testing best config sample " << i << ": " << e.what());
+                break;
+            }
+        }
+
+        if(!best_samples.empty())
+        {
+            all_samples_str << " Config# " << " [" << best_current_config.ToString()
+                    << "_Best_kernel"
+                    << "] Samples(ms): ";
+            for(size_t i = 0; i < best_samples.size(); ++i)
+            {
+                all_samples_str << best_samples[i];
+                if(i < best_samples.size() - 1)
+                    all_samples_str << ", ";
+            }
+
+            MIOPEN_LOG_W(all_samples_str.str());
+        }
+    }
+    // Debug pr-1993
+
+    // // Debug
+    // const auto generic_search_end_time = std::chrono::high_resolution_clock::now();
+    // const auto generic_search_duration =
+    //     std::chrono::duration_cast<std::chrono::milliseconds>(
+    //         generic_search_end_time - generic_search_start_time)
+    //         .count();
+    // MIOPEN_LOG_I("Generic search total time: " << generic_search_duration << " ms");
+
     return best_config;
 }
 
