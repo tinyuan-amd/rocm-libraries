@@ -341,8 +341,9 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
                         const std::optional<FindOptions>& options,
                         bool force_attach_binary)
 {
-    auto& handle = ctx.GetStream();
+    auto& handle = ~.GetStream();
 
+    auto find_start = std::chrono::high_resolution_clock::now();
     // Find
     auto solutions = std::map<AlgorithmName, std::vector<solver::ConvSolution>>{};
     std::transform(
@@ -350,6 +351,10 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
             return std::make_pair(f->GetAlgorithmName(problem),
                                   f->Find(ctx, problem, invoke_ctx, parameters, options));
         });
+    
+    auto find_end = std::chrono::high_resolution_clock::now();
+    auto find_duration = std::chrono::duration_cast<std::chrono::milliseconds>(find_end - find_start).count();
+    MIOPEN_LOG_I("Found solver from algorithm, time: " << find_duration << " ms");
 
     std::size_t total = 0;
 
@@ -365,6 +370,7 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
         ++it;
     }
 
+    auto precompile_start = std::chrono::high_resolution_clock::now();
     // Precompile
     {
         auto all = std::vector<const miopen::solver::ConvSolution*>{};
@@ -376,12 +382,16 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
                            [](auto&& s) { return &s; });
         PrecompileSolutions(handle, all, force_attach_binary);
     }
+    auto precompile_end = std::chrono::high_resolution_clock::now();
+    auto precompile_duration = std::chrono::duration_cast<std::chrono::milliseconds>(precompile_end - precompile_start).count();
+    MIOPEN_LOG_I("Precompile solutions completed, time: " << precompile_duration << " ms");
 
     if(env::enabled((MIOPEN_DEBUG_COMPILE_ONLY)))
         MIOPEN_THROW(
             miopenStatusGpuOperationsSkipped,
             "MIOPEN_DEBUG_COMPILE_ONLY is enabled, escaping forward convolution. Search skipped.");
 
+    auto evaluate_start = std::chrono::high_resolution_clock::now();
     // Evaluate Invokers
     AutoEnableProfiling enableProfiling{handle};
     const auto network_config = problem.MakeNetworkConfig();
@@ -404,6 +414,18 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
                              std::make_move_iterator(evaluated.begin()),
                              std::make_move_iterator(evaluated.end()));
     }
+
+    auto evaluate_end = std::chrono::high_resolution_clock::now();
+    auto evaluate_duration = std::chrono::duration_cast<std::chrono::milliseconds>(evaluate_end - evaluate_start).count();
+    MIOPEN_LOG_I("Evaluate invokers completed, time: " << evaluate_duration << " ms");
+    
+    // Total time summary
+    auto total_duration = find_duration + precompile_duration + evaluate_duration;
+    MIOPEN_LOG_I("FindCore total time: " << total_duration << " ms "
+                 << "(Find: " << find_duration << " ms, "
+                 << "Precompile: " << precompile_duration << " ms, "
+                 << "Evaluate: " << evaluate_duration << " ms), "
+                 << "Solvers: " << solutions.size());
 
     return ret;
 }
