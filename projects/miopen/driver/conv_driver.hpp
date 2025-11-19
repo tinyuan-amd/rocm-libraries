@@ -2035,9 +2035,20 @@ int ConvDriver<Tgpu, Tref>::RunForwardGpuFind(const bool is_transform)
     clGetCommandQueueInfo(q, CL_QUEUE_CONTEXT, sizeof(cl_context), &ctx, nullptr);
 #endif
 
+    auto find_start_time = std::chrono::high_resolution_clock::now();
+
     auto rc = FindForward(ret_algo_count, request_algo_count, perf_results, ctx);
     if(rc != miopenStatusSuccess)
         return rc;
+
+    auto find_end_time = std::chrono::high_resolution_clock::now();
+    auto find_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(find_end_time - find_start_time)
+            .count();
+
+    MIOPEN_LOG_CUSTOM(miopen::LoggingLevel::Info,
+                      "MIOpenDriver",
+                      "Find Forward Conv. Time Elapsed: " << find_duration << " ms");
 
     if(ret_algo_count == 0)
         throw std::runtime_error("Find Forward Conv. ret_algo_count == 0");
@@ -2067,6 +2078,8 @@ int ConvDriver<Tgpu, Tref>::RunForwardGpuFind(const bool is_transform)
     }
     ResizeWorkspaceDev(ctx, ws_size);
     wall.start(wall_enabled);
+
+    auto run_forward_start_time = std::chrono::high_resolution_clock::now();
 
     for(int i = 0; i < num_iterations; i++)
     {
@@ -2103,6 +2116,15 @@ int ConvDriver<Tgpu, Tref>::RunForwardGpuFind(const bool is_transform)
                 kernel_first_time = time;
         }
     }
+
+    auto run_forward_end_time = std::chrono::high_resolution_clock::now();
+    auto run_forward_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(run_forward_end_time -
+                                                              run_forward_start_time)
+            .count();
+    MIOPEN_LOG_CUSTOM(miopen::LoggingLevel::Info,
+                      "MIOpenDriver",
+                      "Run Forward Conv. Time Elapsed: " << run_forward_duration << " ms");
 
     if(wall_enabled)
     {

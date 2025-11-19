@@ -413,6 +413,8 @@ std::vector<Solution> FindConvolution(const ExecutionContext& ctx,
                                       int requestAlgoCount,
                                       bool force_attach_binary)
 {
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     auto results         = std::vector<Solution>{};
     auto sol             = boost::optional<miopenConvSolution_t>{};
     const auto& conv     = problem.GetConv();
@@ -488,6 +490,10 @@ std::vector<Solution> FindConvolution(const ExecutionContext& ctx,
                 ctx_copy.db_update = true;
             }
 
+            auto end_time = std::chrono::high_resolution_clock::now();
+            auto duration_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+            MIOPEN_LOG_I("FindConvlution use time: " << duration_time <<" ms");
+
             return FindCore(invoke_ctx,
                             ctx_copy,
                             problem,
@@ -512,6 +518,10 @@ std::vector<Solution> FindConvolution(const ExecutionContext& ctx,
         MIOPEN_LOG_I(entry.GetSolver().GetAlgo(problem.GetDirection())
                      << "\t" << entry.GetTime() << "\t" << entry.GetWorkspaceSize());
 
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration_time = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    MIOPEN_LOG_I("FindConvlution use time: " << duration_time <<" ms");
+    
     return results;
 }
 

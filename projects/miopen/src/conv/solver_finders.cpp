@@ -341,7 +341,7 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
                         const std::optional<FindOptions>& options,
                         bool force_attach_binary)
 {
-    auto& handle = ~.GetStream();
+    auto& handle = ctx.GetStream();
 
     auto find_start = std::chrono::high_resolution_clock::now();
     // Find
@@ -358,7 +358,7 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
 
     std::size_t total = 0;
 
-    for(auto it = solutions.begin(); it != solutions.end();)
+    for(auto it = solutions.begin(); it != solutions.end();) 
     {
         if(it->second.empty())
         {
