@@ -341,7 +341,9 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
                         const std::optional<FindOptions>& options,
                         bool force_attach_binary)
 {
-    auto& handle = ctx.GetStream();
+
+    auto& handle         = ctx.GetStream();
+    auto find_start_time = std::chrono::high_resolution_clock::now();
 
     // Find
     auto solutions = std::map<AlgorithmName, std::vector<solver::ConvSolution>>{};
@@ -364,6 +366,7 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
         total += it->second.size();
         ++it;
     }
+    auto find_end_time = std::chrono::high_resolution_clock::now();
 
     // Precompile
     {
@@ -376,6 +379,8 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
                            [](auto&& s) { return &s; });
         PrecompileSolutions(handle, all, force_attach_binary);
     }
+
+    auto precompile_end_time = std::chrono::high_resolution_clock::now();
 
     if(env::enabled((MIOPEN_DEBUG_COMPILE_ONLY)))
         MIOPEN_THROW(
@@ -404,6 +409,25 @@ FindCoreResult FindCore(const AnyInvokeParams& invoke_ctx,
                              std::make_move_iterator(evaluated.begin()),
                              std::make_move_iterator(evaluated.end()));
     }
+    auto evaluated_end_time = std::chrono::high_resolution_clock::now();
+
+    auto find_duration_time =
+        std::chrono::duration_cast<std::chrono::milliseconds>(find_end_time - find_start_time)
+            .count();
+    auto precompile_duration_time =
+        std::chrono::duration_cast<std::chrono::milliseconds>(precompile_end_time - find_end_time)
+            .count();
+    auto evaluated_duration_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                       evaluated_end_time - precompile_end_time)
+                                       .count();
+    auto findcore_duration_time =
+        std::chrono::duration_cast<std::chrono::milliseconds>(evaluated_end_time - find_start_time)
+            .count();
+
+    MIOPEN_LOG_I("&&&_Time Test FindCore Find Time: " << find_duration_time << " ms");
+    MIOPEN_LOG_I("&&&_Time Test FindCore precompile Time: " << precompile_duration_time << " ms");
+    MIOPEN_LOG_I("&&&_Time Test FindCore evaluated Time: " << evaluated_duration_time << " ms");
+    MIOPEN_LOG_I("&&&_Time Test FindCore findcore total Time: " << findcore_duration_time << " ms");
 
     return ret;
 }

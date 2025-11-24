@@ -413,6 +413,8 @@ std::vector<Solution> FindConvolution(const ExecutionContext& ctx,
                                       int requestAlgoCount,
                                       bool force_attach_binary)
 {
+    auto find_conv_start = std::chrono::high_resolution_clock::now();
+
     auto results         = std::vector<Solution>{};
     auto sol             = boost::optional<miopenConvSolution_t>{};
     const auto& conv     = problem.GetConv();
@@ -441,6 +443,10 @@ std::vector<Solution> FindConvolution(const ExecutionContext& ctx,
             sol = sols.front();
         // In Hybrid Find mode, we use Normal Find instead of Immediate fallback kernels.
     }
+
+    auto time_point_1 = std::chrono::high_resolution_clock::now();
+    auto time_point_2 = std::chrono::high_resolution_clock::now();
+    auto time_point_3 = std::chrono::high_resolution_clock::now();
 
     if(sol.has_value())
     {
@@ -472,10 +478,11 @@ std::vector<Solution> FindConvolution(const ExecutionContext& ctx,
             CompileSolution(id, ctx, problem);
             results.push_back({id, sol->time, solver.GetWorkspaceSize(ctx, problem)});
         }
+        time_point_2 = std::chrono::high_resolution_clock::now();
     }
     else
     {
-        results = UserFindDbRecord::TryLoad(ctx.GetStream(), problem, [&]() {
+        results           = UserFindDbRecord::TryLoad(ctx.GetStream(), problem, [&]() {
             auto ctx_copy                       = ctx;
             ctx_copy.use_dynamic_solutions_only = findMode.IsDynamicHybrid(ctx);
             const auto params =
@@ -496,8 +503,10 @@ std::vector<Solution> FindConvolution(const ExecutionContext& ctx,
                             std::nullopt,
                             force_attach_binary);
         });
+        time_point_3 = std::chrono::high_resolution_clock::now();
     }
 
+    auto time_point_4 = std::chrono::high_resolution_clock::now();
     if(env::enabled(MIOPEN_DEBUG_COMPILE_ONLY))
     {
         MIOPEN_THROW(
@@ -507,17 +516,42 @@ std::vector<Solution> FindConvolution(const ExecutionContext& ctx,
 
     ShrinkToFind10Results(results);
     results.resize(std::min<std::size_t>(results.size(), requestAlgoCount));
+    auto time_point_5 = std::chrono::high_resolution_clock::now();
 
     for(const auto& entry : results)
         MIOPEN_LOG_I(entry.GetSolver().GetAlgo(problem.GetDirection())
                      << "\t" << entry.GetTime() << "\t" << entry.GetWorkspaceSize());
+
+    auto time_1_start_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(time_point_1 - find_conv_start)
+            .count();
+    auto time_2_1_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(time_point_2 - time_point_1).count();
+    auto time_3_1_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(time_point_3 - time_point_1).count();
+    auto time_5_4_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(time_point_5 - time_point_4).count();
+    auto time_5_start_duration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(time_point_5 - find_conv_start)
+            .count();
+
+    MIOPEN_LOG_I("FindConvolution: Execution Summary");
+    MIOPEN_LOG_I("Number of solutions found: " << sols.size());
+    MIOPEN_LOG_I("Fallback path: " << (fallback == FallbackPath::None ? "None" : "AI/WTI"));
+    MIOPEN_LOG_I("User Find DB solutions size: " << ufdb_sols.size());
+    MIOPEN_LOG_I("Force attach binary: " << (force_attach_binary ? "true" : "false"));
+    MIOPEN_LOG_I("&&&_Time Test FindConvolution Time Part_0: " << time_1_start_duration << " ms");
+    MIOPEN_LOG_I("&&&_Time Test FindConvolution Time Part_1: " << time_2_1_duration << " ms");
+    MIOPEN_LOG_I("&&&_Time Test FindConvolution Time Part_2: " << time_3_1_duration << " ms");
+    MIOPEN_LOG_I("&&&_Time Test FindConvolution Time Part_3: " << time_5_4_duration << " ms");
+    MIOPEN_LOG_I("&&&_Time Test FindConvolution Time Part_4: " << time_5_start_duration << " ms");
 
     return results;
 }
 
 template <class FieldType>
 static inline void FillFindReturnParameters(const std::vector<Solution>& results,
-                                            FieldType miopenConvAlgoPerf_t::*field,
+                                            FieldType miopenConvAlgoPerf_t::* field,
                                             const char* log_start,
                                             int* const returned_algo_count,
                                             miopenConvAlgoPerf_t* perf_results)
@@ -775,6 +809,8 @@ void ConvolutionDescriptor::ConvolutionForward(const Handle& handle,
                                                Data_t workSpace,
                                                size_t workSpaceSize) const
 {
+    auto start_time = std::chrono::high_resolution_clock::now();
+
     MIOPEN_LOG_I("algo = " << algo << ", workspace = " << workSpaceSize);
     ValidateWorkspace(workSpace, workSpaceSize);
 
@@ -803,6 +839,13 @@ void ConvolutionDescriptor::ConvolutionForward(const Handle& handle,
                                                             alpha_val,
                                                             beta_val};
             (*invoker)(handle, invoke_ctx);
+
+            auto end_time = std::chrono::high_resolution_clock::now();
+            auto duration_time =
+                std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time)
+                    .count();
+            MIOPEN_LOG_I("&&&_Time Test: ConvolutionForward run time: " << duration_time << " ms");
+
             return;
         }
 
@@ -1174,6 +1217,7 @@ void ConvolutionDescriptor::ConvolutionBackwardData(const Handle& handle,
                                                     Data_t workSpace,
                                                     size_t workSpaceSize) const
 {
+    auto start_time = std::chrono::high_resolution_clock::now();
     MIOPEN_LOG_I("algo = " << algo << ", workspace = " << workSpaceSize);
     ValidateWorkspace(workSpace, workSpaceSize);
 
@@ -1208,6 +1252,10 @@ void ConvolutionDescriptor::ConvolutionBackwardData(const Handle& handle,
                                                         this->attribute.gfx90aFp16alt.GetBwd(),
                                                         alpha_val,
                                                         beta_val};
+        auto end_time          = std::chrono::high_resolution_clock::now();
+        auto duration_time =
+            std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+        MIOPEN_LOG_I("&&&_Time Test: ConvolutionBackwardData run time: " << duration_time << " ms");
         (*invoker)(handle, invoke_ctx);
     });
 }
@@ -1381,6 +1429,7 @@ void ConvolutionDescriptor::ConvolutionBackwardWeights(const Handle& handle,
                                                        Data_t workSpace,
                                                        size_t workSpaceSize) const
 {
+    auto start_time = std::chrono::high_resolution_clock::now();
     MIOPEN_LOG_I("algo = " << algo << ", workspace = " << workSpaceSize);
     ValidateWorkspace(workSpace, workSpaceSize);
     decltype(auto) tensors = ConvWrwTensors{dyDesc, dy, xDesc, x, dwDesc, dw};
@@ -1413,6 +1462,10 @@ void ConvolutionDescriptor::ConvolutionBackwardWeights(const Handle& handle,
                                                       alpha_val,
                                                       beta_val};
         (*invoker)(handle, invoke_ctx);
+        auto end_time = std::chrono::high_resolution_clock::now();
+        auto duration_time =
+            std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+        MIOPEN_LOG_I("&&&_Time Test: ConvolutionBackwardData run time: " << duration_time << " ms");
     });
 }
 
