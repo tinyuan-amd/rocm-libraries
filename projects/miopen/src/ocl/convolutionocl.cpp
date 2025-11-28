@@ -482,7 +482,7 @@ std::vector<Solution> FindConvolution(const ExecutionContext& ctx,
     }
     else
     {
-        results           = UserFindDbRecord::TryLoad(ctx.GetStream(), problem, [&]() {
+        results      = UserFindDbRecord::TryLoad(ctx.GetStream(), problem, [&]() {
             auto ctx_copy                       = ctx;
             ctx_copy.use_dynamic_solutions_only = findMode.IsDynamicHybrid(ctx);
             const auto params =
@@ -583,6 +583,9 @@ void ConvolutionDescriptor::FindConvFwdAlgorithm(const Handle& handle,
                                                  size_t workSpaceSize,
                                                  bool exhaustiveSearch) const
 {
+    MIOPEN_LOG_I("&&&&_FindConvFwdAlgorithm Starting");
+    auto start = std::chrono::high_resolution_clock::now();
+
     MIOPEN_LOG_I("requestAlgoCount = " << requestAlgoCount << ", workspace = " << workSpaceSize);
     ValidateWorkspace(workSpace, workSpaceSize);
     if(x == nullptr || w == nullptr || y == nullptr)
@@ -620,6 +623,10 @@ void ConvolutionDescriptor::FindConvFwdAlgorithm(const Handle& handle,
 
     FillFindReturnParameters(
         results, &miopenConvAlgoPerf_t::fwd_algo, "FW", returnedAlgoCount, perfResults);
+
+    auto end      = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    MIOPEN_LOG_I("&&&_Time Test FindConvFwdAlgorithm Time: " << duration << " ms");
 }
 
 namespace {
@@ -809,6 +816,7 @@ void ConvolutionDescriptor::ConvolutionForward(const Handle& handle,
                                                Data_t workSpace,
                                                size_t workSpaceSize) const
 {
+    MIOPEN_LOG_I("&&&&_ConvolutionForward Starting");
     auto start_time = std::chrono::high_resolution_clock::now();
 
     MIOPEN_LOG_I("algo = " << algo << ", workspace = " << workSpaceSize);
@@ -839,18 +847,15 @@ void ConvolutionDescriptor::ConvolutionForward(const Handle& handle,
                                                             alpha_val,
                                                             beta_val};
             (*invoker)(handle, invoke_ctx);
-
-            auto end_time = std::chrono::high_resolution_clock::now();
-            auto duration_time =
-                std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time)
-                    .count();
-            MIOPEN_LOG_I("&&&_Time Test: ConvolutionForward run time: " << duration_time << " ms");
-
             return;
         }
 
         MIOPEN_THROW("No invoker was registered for convolution forward. Was find executed?");
     });
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration_time =
+        std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count();
+    MIOPEN_LOG_I("&&&_Time Test: ConvolutionForward run time: " << duration_time << " us");
 }
 
 static std::size_t GetSolutionCount(const Handle& handle, const conv::ProblemDescription& problem)
@@ -917,6 +922,8 @@ ConvolutionDescriptor::GetSolutionsFallback(const ExecutionContext& ctx,
                                             FallbackPath* fallbackPathTaken,
                                             const AnyInvokeParams* const invokeParams) const
 {
+    MIOPEN_LOG_I("&&&&_GetSolutionsFallback Starting");
+
     if(env::disabled(MIOPEN_DEBUG_CONV_IMMED_FALLBACK))
     {
         MIOPEN_LOG_I("Disabled via environment");

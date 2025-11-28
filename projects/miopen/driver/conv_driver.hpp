@@ -101,10 +101,10 @@ struct AutoMiopenWarmupMode
         miopen::debug::FindEnforceDisable = true;
         miopen::debug::IsWarmupOngoing    = true;
     }
-    AutoMiopenWarmupMode(const AutoMiopenWarmupMode&) = delete;
-    AutoMiopenWarmupMode(AutoMiopenWarmupMode&&)      = delete;
+    AutoMiopenWarmupMode(const AutoMiopenWarmupMode&)            = delete;
+    AutoMiopenWarmupMode(AutoMiopenWarmupMode&&)                 = delete;
     AutoMiopenWarmupMode& operator=(const AutoMiopenWarmupMode&) = delete;
-    AutoMiopenWarmupMode& operator=(AutoMiopenWarmupMode&&) = delete;
+    AutoMiopenWarmupMode& operator=(AutoMiopenWarmupMode&&)      = delete;
     ~AutoMiopenWarmupMode()
     {
         miopen::debug::LoggingQuiet       = debug_logging_quiet_prev;
@@ -127,10 +127,10 @@ struct AutoPrepareForGpuReference
         miopen::debug::AlwaysEnableConvDirectNaive = true;
         miopen::debug::LoggingQuiet                = true;
     }
-    AutoPrepareForGpuReference(const AutoPrepareForGpuReference&) = delete;
-    AutoPrepareForGpuReference(AutoPrepareForGpuReference&&)      = delete;
+    AutoPrepareForGpuReference(const AutoPrepareForGpuReference&)            = delete;
+    AutoPrepareForGpuReference(AutoPrepareForGpuReference&&)                 = delete;
     AutoPrepareForGpuReference& operator=(const AutoPrepareForGpuReference&) = delete;
-    AutoPrepareForGpuReference& operator=(AutoPrepareForGpuReference&&) = delete;
+    AutoPrepareForGpuReference& operator=(AutoPrepareForGpuReference&&)      = delete;
     ~AutoPrepareForGpuReference()
     {
         miopen::debug::LoggingQuiet                = quiet_prev;
@@ -1503,8 +1503,7 @@ int ConvDriver<Tgpu, Tref>::AllocateBuffersAndCopy()
 
         if(!doutRead)
         {
-            auto gen = [&]() -> auto
-            {
+            auto gen = [&]() -> auto {
                 return is_fp8 ? prng::gen_A_to_B(Data_min, Data_max) : prng::gen_0_to_B(Data_scale);
             };
             dout.InitHostData(out_sz, is_bwd || is_wrw, gen);
@@ -1651,6 +1650,8 @@ int ConvDriver<Tgpu, Tref>::FindForward(int& ret_algo_count,
                                         std::vector<miopenConvAlgoPerf_t>& perf_results,
                                         context_t ctx)
 {
+    MIOPEN_LOG_I("&&&&_FindForward Starting");
+    auto start = std::chrono::high_resolution_clock::now();
     bool is_transform = IsInputTensorTransform();
     fwd_auxiliary.resume(wall_enabled);
     ResizeWorkspaceDev(ctx, ws_sizeof_find_fwd);
@@ -1670,6 +1671,10 @@ int ConvDriver<Tgpu, Tref>::FindForward(int& ret_algo_count,
         ws_sizeof_find_fwd,
         (inflags.GetValueInt("search") == 1) ? true : false);
     fwd_auxiliary.pause(wall_enabled);
+
+    auto end      = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    MIOPEN_LOG_I("&&&_Time Test FindForward Time: " << duration << " ms");
     return rc;
 }
 
@@ -1891,6 +1896,8 @@ int ConvDriver<Tgpu, Tref>::RunWarmupFindForwardGPU()
 template <typename Tgpu, typename Tref>
 int ConvDriver<Tgpu, Tref>::RunForwardGPU()
 {
+    MIOPEN_LOG_I("&&&&_RunForwardGPU Starting");
+    auto start = std::chrono::high_resolution_clock::now();
     if(!is_fwd)
         return 0;
 
@@ -1963,7 +1970,9 @@ int ConvDriver<Tgpu, Tref>::RunForwardGPU()
             dumpBufferToFile<Tgpu>(
                 "dump_fwd_out_gpu.bin", out.GetVectorData(), out.GetVectorSize());
     }
-
+    auto end      = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+    MIOPEN_LOG_I("&&&_Time Test RunForwardGPU Time: " << duration << " ms");
     return rc;
 }
 
@@ -2022,6 +2031,8 @@ void ConvDriver<Tgpu, Tref>::GetSolutionAfterFind(
 template <typename Tgpu, typename Tref>
 int ConvDriver<Tgpu, Tref>::RunForwardGpuFind(const bool is_transform)
 {
+    MIOPEN_LOG_I("&&&_RunForwardGpuFind Starting");
+    auto start_time = std::chrono::high_resolution_clock::now();
     int ret_algo_count;
     int request_algo_count = 2;
     // The library returns `request_algo_count` algorithms to the caller. However this does
@@ -2122,7 +2133,10 @@ int ConvDriver<Tgpu, Tref>::RunForwardGpuFind(const bool is_transform)
         std::cout << "MIOpen Forward Conv. " << AlgorithmSolutionToString(solution) << std::endl;
         PrintForwardTime(kernel_total_time, kernel_first_time);
     }
-
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration_time =
+        std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+    MIOPEN_LOG_I("&&&_Time Test: RunForwardGpuFind run time: " << duration_time << " ms");
     return rc;
 }
 
@@ -2452,6 +2466,7 @@ int ConvDriver<Tgpu, Tref>::FindBackwardWeights(int& ret_algo_count,
 template <typename Tgpu, typename Tref>
 int ConvDriver<Tgpu, Tref>::RunBackwardGPU()
 {
+
     if(data_type == miopenInt8 || data_type == miopenInt8x4)
     {
         std::cout << "Int8 Backward Convolution is not supported" << std::endl;

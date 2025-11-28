@@ -505,6 +505,7 @@ std::vector<uint64_t> PredictSolver(const conv::ProblemDescription& problem,
                                     const ExecutionContext& ctx,
                                     const std::string& device)
 {
+    MIOPEN_LOG_I("&&&&_PredictSolver Starting");
     const static std::unique_ptr<Model> model = GetModel(device);
     if(!model || !model->IsProblemSupported(problem, ctx))
         return {};

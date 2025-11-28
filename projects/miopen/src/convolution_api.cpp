@@ -562,7 +562,7 @@ miopenFindConvolutionForwardAlgorithm(miopenHandle_t handle,
                                       size_t workSpaceSize,
                                       bool exhaustiveSearch)
 {
-
+    MIOPEN_LOG_I("&&&&_miopenFindConvolutionForwardAlgorithm Starting");
     MIOPEN_LOG_FUNCTION(handle,
                         xDesc,
                         x,
@@ -639,7 +639,7 @@ miopenConvolutionForward(miopenHandle_t handle,
                          void* workSpace,
                          size_t workSpaceSize)
 {
-
+    MIOPEN_LOG_I("&&&&_miopenConvolutionForward Starting");
     MIOPEN_LOG_FUNCTION(handle,
                         alpha,
                         xDesc,
@@ -1171,6 +1171,7 @@ miopenFindConvolutionBackwardDataAlgorithm(miopenHandle_t handle,
                                            bool exhaustiveSearch)
 {
 
+    MIOPEN_LOG_I("&&&&_miopenFindConvolutionBackwardDataAlgorithm starting");
     MIOPEN_LOG_FUNCTION(handle,
                         dyDesc,
                         dy,
