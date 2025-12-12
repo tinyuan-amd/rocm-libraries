@@ -310,6 +310,8 @@ std::vector<Solution> EvaluateInvokers(const Handle& handle,
                 best_invoker = invoker;
             }
 
+            MIOPEN_LOG_W("$$$$$_Solver_id: " << sol.solver_id << " $$$$$_Solver_time: "<< elapsed);
+
             auto solution = Solution{solver::Id{sol.solver_id}, elapsed, sol.workspace_sz};
             if(force_attach_binary)
                 solution.SetInvoker(invoker, programs, selected.construction_params);

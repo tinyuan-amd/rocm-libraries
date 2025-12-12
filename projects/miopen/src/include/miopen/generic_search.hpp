@@ -577,6 +577,8 @@ auto GenericSearch(const Solver s,
                 elapsed_time = std::min(initial_time_1, initial_time_2);
                 samples.push_back(initial_time_1);
                 samples.push_back(initial_time_2);
+                MIOPEN_LOG_W(" $$$$$$_Config_test_time: "
+                             << elapsed_time << " $$$$$$_Config_test_config:" << current_config);
             }
             catch(const std::exception& e)
             {
@@ -589,10 +591,10 @@ auto GenericSearch(const Solver s,
                 ret = 1;
             }
 
-            MIOPEN_LOG_T("##"
-                         << "(n_current, n_failed, n_runs_total):  " << n_current << '/' << n_failed
-                         << '/' << n_runs_total << " elapsed_time: " << elapsed_time
-                         << ", best_time: " << best_time << ", " << current_config);
+            MIOPEN_LOG_T("##" << "(n_current, n_failed, n_runs_total):  " << n_current << '/'
+                              << n_failed << '/' << n_runs_total
+                              << " elapsed_time: " << elapsed_time << ", best_time: " << best_time
+                              << ", " << current_config);
 
             if(ret == 0)
             {
@@ -601,10 +603,10 @@ auto GenericSearch(const Solver s,
                 // worst sample of the best config, continue with 8 more samples (total 10).
                 // The 1.2x threshold (vs original 1.1x) accounts for initial test variance.
                 // Remove positive z-score outliers and use the mean for calculating best config.
-                constexpr int N_RUNS = 10;
+                constexpr int N_RUNS                 = 2;
                 constexpr float EARLY_STOP_THRESHOLD = 1.20f;
                 last_imprv++;
-                if(elapsed_time / worst_time < EARLY_STOP_THRESHOLD)
+                if(1)
                 {
                     MIOPEN_LOG_I2("Initial test passed (" << elapsed_time << " / " << worst_time
                                                           << " = " << (elapsed_time / worst_time)
@@ -652,15 +654,13 @@ auto GenericSearch(const Solver s,
                             MIOPEN_LOG_I2("Mean is not better: " << elapsed_time
                                                                  << " >= " << best_time);
                         }
-
                     }
                 }
                 else
                 {
-                    MIOPEN_LOG_I2("Configuration discarded by early-stop: " << elapsed_time << " / "
-                                                                            << worst_time << " = "
-                                                                            << (elapsed_time / worst_time)
-                                                                            << " >= " << EARLY_STOP_THRESHOLD);
+                    MIOPEN_LOG_I2("Configuration discarded by early-stop: "
+                                  << elapsed_time << " / " << worst_time << " = "
+                                  << (elapsed_time / worst_time) << " >= " << EARLY_STOP_THRESHOLD);
                 }
                 if(perf_sols)
                 {
@@ -701,6 +701,8 @@ auto GenericSearch(const Solver s,
 
     MIOPEN_LOG_I("Done: " << n_runs_total << '/' << n_failed << '/' << n_runs_total << ", best #"
                           << n_best << ' ' << best_time << ' ' << best_config);
+    MIOPEN_LOG_W("$$$$$_Best_Config_Time: " << best_time
+                                            << " $$$$$_Best_Config: " << best_config);
 
     if(!is_passed)
         MIOPEN_THROW("Search failed");
